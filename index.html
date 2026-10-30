@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0a0e13">
+<title>Replica · ESP32-S3 Console</title>
+<!--
+  PWA SHELL — step 3 of the build.
+  Runs standalone in any browser. No hardware required to develop the UI or the simulator.
+  DEPLOY NOTES (for Bubblewrap / installable app):
+    1. Host this as index.html on your own GitHub Pages / Vercel.
+    2. Add manifest.json (name, icons, start_url, display:standalone, theme_color).
+    3. Add a service worker (sw.js) that caches the shell for offline use.
+    4. bubblewrap init --manifest https://YOUR-HOST/manifest.json  ->  signed APK.
+  DEVICE ENDPOINTS: the paths in DEVICE.* below are placeholders that map to the
+  USB Army Knife web server. Confirm exact routes against its source / DevTools once flashed.
+  LOCAL AI: points at the Ollama-backed Flask service from your build guide (default :5001).
+    That service needs CORS enabled (pip install flask-cors) to accept calls from this origin.
+-->
+<style>
+  :root{
+    --ink:#0a0e13;--panel:#141b24;--panel2:#1b232e;--line:#26313d;
+    --text:#c9d4de;--muted:#7d8b99;--signal:#ffb020;--wire:#4ec9c9;--blue:#5aa9ff;
+    --ok:#3fb950;--danger:#ff5f56;
+    --mono:ui-monospace,'JetBrains Mono','Cascadia Code',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
+    display:flex;flex-direction:column;min-height:100vh;font-size:15px}
+  /* top bar */
+  .topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);
+    background:radial-gradient(120% 100% at 100% 0%,rgba(255,176,32,.06),transparent 60%)}
+  .logo{font-family:var(--mono);font-weight:600;letter-spacing:.02em;color:#eef4f9}
+  .logo b{color:var(--signal)}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger)}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  /* content */
+  main{flex:1;overflow-y:auto;padding:18px 16px 90px;max-width:820px;width:100%;margin:0 auto}
+  .view{display:none;animation:fade .18s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--signal);margin:0 0 4px}
+  .sub{color:#eef4f9;font-size:19px;font-weight:600;margin:0 0 16px}
+  /* tab bar */
+  nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--panel);border-top:1px solid var(--line);
+    padding:6px max(16px,env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom))}
+  nav button{flex:1;background:none;border:0;color:var(--muted);font-family:var(--mono);font-size:11px;
+    padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;letter-spacing:.05em}
+  nav button .ico{font-size:17px;line-height:1}
+  nav button.active{color:var(--signal)}
+  /* components */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  label{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px}
+  input,textarea,select{width:100%;background:#0a0e13;color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:11px 12px;font-family:var(--mono);font-size:13px;outline:none}
+  input:focus,textarea:focus{border-color:var(--signal)}
+  textarea{resize:vertical;line-height:1.55}
+  button.btn{background:var(--signal);color:#0a0e13;border:0;border-radius:8px;padding:11px 16px;
+    font-weight:700;cursor:pointer;font-size:14px;white-space:nowrap}
+  button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button.btn.wire{background:var(--wire)}
+  button.btn.blue{background:var(--blue);color:#0a0e13}
+  button.btn:active{transform:translateY(1px)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+  .chip{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:6px 12px;
+    font-family:var(--mono);font-size:12px;color:var(--text);cursor:pointer}
+  .chip:hover{border-color:var(--signal);color:#fff}
+  pre{background:#0a0e13;border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;
+    font-family:var(--mono);font-size:12.5px;line-height:1.6;margin:0;min-height:44px;white-space:pre-wrap}
+  .hint{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;
+    color:var(--blue);border:1px solid var(--line);border-radius:4px;padding:2px 7px;display:inline-block}
+  .split{display:grid;gap:12px}
+  @media(min-width:640px){.split.two{grid-template-columns:1fr 1fr}}
+  .legal{border-left:3px solid var(--signal);background:var(--panel);border-radius:0 8px 8px 0;
+    padding:12px 14px;font-size:13px;color:var(--muted);margin-bottom:16px}
+  .simline{color:var(--wire)} .simkey{color:var(--signal)} .simcom{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">// <b>REPLICA</b> console</span>
+  <div class="status">
+    <span id="stTxt">disconnected</span><span class="dot" id="stDot"></span>
+  </div>
+</div>
+
+<main>
+  <!-- ============ SCRIPTS ============ -->
+  <section class="view active" id="v-scripts">
+    <h2>01 · Payload</h2>
+    <div class="sub">DuckyScript Editor</div>
+    <div class="legal">Authorized lab use only — run against systems you own or are contracted to test. Presets below generate benign, observable telemetry for detection work.</div>
+
+    <div class="card">
+      <label>Presets <span class="tag">benign / lab</span></label>
+      <div class="chips" id="presetChips"></div>
+      <label>Script</label>
+      <textarea id="script" rows="9" spellcheck="false">REM lab marker — generates clean process-creation telemetry
+DELAY 800
+GUI r
+DELAY 400
+STRING notepad
+ENTER
+DELAY 600
+STRING [REPLICA] lab telemetry test — authorized host only
+</textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" onclick="runScript()">▶ Execute on device</button>
+        <button class="btn wire" onclick="simulate()">◐ Simulate</button>
+        <button class="btn ghost" onclick="saveToDevice()">⤓ Save to SD</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Simulator output <span class="hint" style="display:inline">— no device required</span></label>
+      <pre id="simOut">// press Simulate to preview keystrokes + timing</pre>
+    </div>
+  </section>
+
+  <!-- ============ RECON ============ -->
+  <section class="view" id="v-recon">
+    <h2>02 · Recon</h2>
+    <div class="sub">Wireless Scanner</div>
+    <div class="split two">
+      <div class="card">
+        <label>Wi-Fi</label>
+        <button class="btn ghost" onclick="devCall('wifiScan','Wi-Fi scan')">Scan networks</button>
+        <pre id="wifiOut" style="margin-top:10px">// results appear here</pre>
+      </div>
+      <div class="card">
+        <label>BLE</label>
+        <button class="btn ghost" onclick="devCall('bleScan','BLE scan')">Scan devices</button>
+        <pre id="bleOut" style="margin-top:10px">// results appear here</pre>
+      </div>
+    </div>
+    <div class="card">
+      <label>Deauth monitor <span class="tag">passive / defensive</span></label>
+      <div class="row">
+        <button class="btn ghost" onclick="devCall('deauthStart','Deauth monitor')">▶ Start</button>
+        <button class="btn ghost" onclick="devCall('deauthStop','Stop')">■ Stop</button>
+      </div>
+      <pre id="deauthOut" style="margin-top:10px">// passive 802.11 deauth detector — flags attacks against your own APs</pre>
+    </div>
+  </section>
+
+  <!-- ============ AI ============ -->
+  <section class="view" id="v-ai">
+    <h2>03 · Assistant</h2>
+    <div class="sub">Local AI · annotated output</div>
+    <div class="card">
+      <label>Describe the lab action</label>
+      <textarea id="aiPrompt" rows="3" spellcheck="false">open the run dialog and launch calc, as a benign telemetry test</textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn blue" onclick="aiGen()">⚡ Generate</button>
+        <span class="hint" id="aiState"></span>
+      </div>
+    </div>
+    <div class="card">
+      <label>DuckyScript</label>
+      <pre id="aiScript">—</pre>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="aiToEditor()">→ Send to editor</button>
+      </div>
+    </div>
+    <div class="card" style="border-left:3px solid var(--blue)">
+      <label style="color:var(--blue)">Detection story</label>
+      <div id="aiDetect" style="font-size:13.5px">—</div>
+    </div>
+    <div class="hint">Runs against your local Ollama service (Settings → AI endpoint). Nothing leaves the host.</div>
+  </section>
+
+  <!-- ============ TOOLS ============ -->
+  <section class="view" id="v-tools">
+    <h2>04 · Tools</h2>
+    <div class="sub">Utilities</div>
+    <div class="split two">
+      <div class="card"><label>NeoPixel</label>
+        <div class="row"><input type="color" id="npColor" value="#ffb020" style="height:44px;padding:4px">
+        <button class="btn ghost" onclick="devCall('neopixel','NeoPixel')">Apply</button></div></div>
+      <div class="card"><label>Firmware</label>
+        <button class="btn ghost" onclick="devCall('devInfo','Device info')">Device info</button>
+        <pre id="infoOut" style="margin-top:10px">// firmware / chip / build</pre></div>
+      <div class="card"><label>File manager</label>
+        <button class="btn ghost" onclick="devCall('files','List SD')">List SD card</button>
+        <pre id="fileOut" style="margin-top:10px">// files on device</pre></div>
+      <div class="card"><label>Vault <span class="tag">AES at rest</span></label>
+        <div class="hint">Encrypted client-side before write. Key never stored on device — the upgrade over GhostChip's plaintext SD vault.</div>
+        <button class="btn ghost" style="margin-top:10px" onclick="alert('Vault UI stub — wire to WebCrypto AES-GCM, then POST ciphertext to device')">Open vault</button></div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view" id="v-settings">
+    <h2>05 · Settings</h2>
+    <div class="sub">Connection</div>
+    <div class="card">
+      <label>Device IP (AP mode)</label>
+      <div class="row"><input id="devIp" value="192.168.4.1">
+      <button class="btn" onclick="ping()">Ping</button></div>
+      <div class="hint" id="pingHint">Default AP gateway. Change if you set a static/station IP.</div>
+    </div>
+    <div class="card">
+      <label>Local AI endpoint (Ollama backend)</label>
+      <input id="aiEndpoint" value="http://127.0.0.1:5001/api/generate">
+      <div class="hint">The Flask service from your build guide. Enable CORS for this origin.</div>
+    </div>
+    <div class="card" style="border-left:3px solid var(--danger)">
+      <label style="color:var(--danger)">Danger zone</label>
+      <div class="row">
+        <button class="btn ghost" onclick="devCall('reboot','Reboot')">Reboot device</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="active" data-v="scripts" onclick="tab('scripts',this)"><span class="ico">⌨</span>Scripts</button>
+  <button data-v="recon" onclick="tab('recon',this)"><span class="ico">📡</span>Recon</button>
+  <button data-v="ai" onclick="tab('ai',this)"><span class="ico">✦</span>AI</button>
+  <button data-v="tools" onclick="tab('tools',this)"><span class="ico">🔧</span>Tools</button>
+  <button data-v="settings" onclick="tab('settings',this)"><span class="ico">⚙</span>Settings</button>
+</nav>
+
+<script>
+/* ---------- navigation ---------- */
+function tab(v,el){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('v-'+v).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  window.scrollTo(0,0);
+}
+
+/* ---------- device connection layer ----------
+   Maps to the USB Army Knife web server. Endpoint paths are placeholders —
+   confirm against the firmware source / DevTools once the board is flashed. */
+const DEVICE = {
+  base:  () => 'http://' + document.getElementById('devIp').value.trim(),
+  paths: {
+    ping:'/', run:'/run', save:'/save', files:'/files',
+    wifiScan:'/scan/wifi', bleScan:'/scan/ble',
+    deauthStart:'/deauth/start', deauthStop:'/deauth/stop',
+    neopixel:'/neopixel', devInfo:'/info', reboot:'/reboot'
+  }
+};
+function setStatus(on){
+  document.getElementById('stDot').classList.toggle('on',on);
+  document.getElementById('stTxt').textContent = on ? 'connected' : 'disconnected';
+}
+async function ping(){
+  const hint=document.getElementById('pingHint');
+  hint.textContent='pinging '+DEVICE.base()+' …';
+  try{
+    const r=await fetch(DEVICE.base()+DEVICE.paths.ping,{mode:'no-cors',cache:'no-store'});
+    setStatus(true); hint.textContent='device reachable ✓';
+  }catch(e){ setStatus(false); hint.textContent='no response — check IP / same Wi-Fi / device powered'; }
+}
+async function devCall(key,label){
+  const out={wifiScan:'wifiOut',bleScan:'bleOut',deauthStart:'deauthOut',deauthStop:'deauthOut',
+    devInfo:'infoOut',files:'fileOut'}[key];
+  if(out) document.getElementById(out).textContent='// '+label+' — requesting…';
+  try{
+    const r=await fetch(DEVICE.base()+(DEVICE.paths[key]||'/'),{cache:'no-store'});
+    const t=await r.text();
+    if(out) document.getElementById(out).textContent=t||'// (empty response)';
+    setStatus(true);
+  }catch(e){
+    if(out) document.getElementById(out).textContent='// unreachable — connect to the device AP first';
+    setStatus(false);
+  }
+}
+async function runScript(){
+  try{
+    await fetch(DEVICE.base()+DEVICE.paths.run,{method:'POST',
+      headers:{'Content-Type':'text/plain'},body:document.getElementById('script').value});
+    setStatus(true);
+  }catch(e){ setStatus(false); alert('Device unreachable — connect to its Wi-Fi AP, then Ping in Settings.'); }
+}
+async function saveToDevice(){
+  const name=prompt('Filename on SD:','lab-test.txt'); if(!name)return;
+  try{ await fetch(DEVICE.base()+DEVICE.paths.save+'?name='+encodeURIComponent(name),
+      {method:'POST',headers:{'Content-Type':'text/plain'},body:document.getElementById('script').value});
+  }catch(e){ alert('Device unreachable.'); }
+}
+
+/* ---------- benign preset library ---------- */
+const PRESETS = {
+  'Run dialog':'REM open Run dialog\nDELAY 500\nGUI r\n',
+  'Notepad marker':'REM benign marker string -> clean process-creation telemetry\nDELAY 800\nGUI r\nDELAY 400\nSTRING notepad\nENTER\nDELAY 600\nSTRING [REPLICA] authorized lab test\n',
+  'whoami -> file':'REM benign recon: writes whoami to a local file (generates 4688/Sysmon-1 events)\nDELAY 800\nGUI r\nDELAY 400\nSTRING cmd\nENTER\nDELAY 600\nSTRING whoami > %USERPROFILE%\\lab_whoami.txt\nENTER\n',
+  'systeminfo -> file':'REM benign host inventory to a local file (no exfil)\nDELAY 800\nGUI r\nDELAY 400\nSTRING cmd\nENTER\nDELAY 600\nSTRING systeminfo > %USERPROFILE%\\lab_sysinfo.txt\nENTER\n',
+  'macOS Spotlight':'REM open Spotlight (macOS)\nDELAY 500\nGUI SPACE\n',
+  'Linux terminal':'REM open terminal (most GNOME/Linux)\nDELAY 500\nCTRL ALT t\n'
+};
+const pc=document.getElementById('presetChips');
+Object.keys(PRESETS).forEach(k=>{
+  const c=document.createElement('span');c.className='chip';c.textContent=k;
+  c.onclick=()=>document.getElementById('script').value=PRESETS[k];
+  pc.appendChild(c);
+});
+
+/* ---------- in-browser simulator (no device) ---------- */
+function simulate(){
+  const lines=document.getElementById('script').value.split('\n');
+  let out=[],t=0;
+  for(const raw of lines){
+    const line=raw.trim(); if(!line)continue;
+    if(line.startsWith('REM')){ out.push(`<span class="simcom">${line}</span>`); continue; }
+    const m=line.match(/^DELAY\s+(\d+)/i);
+    if(m){ t+=parseInt(m[1]); out.push(`<span class="simcom">   … wait ${m[1]}ms (t=${t}ms)</span>`); continue; }
+    const s=line.match(/^STRING\s+(.*)/i);
+    if(s){ out.push(`<span class="simline">[type] </span>${s[1].replace(/</g,'&lt;')}`); continue; }
+    out.push(`<span class="simkey">[key ] ${line.replace(/</g,'&lt;')}</span>`);
+  }
+  out.push(`<span class="simcom">\n// total runtime ~${t}ms · ${out.length} steps · nothing executed</span>`);
+  document.getElementById('simOut').innerHTML=out.join('\n');
+}
+
+/* ---------- local AI (Ollama-backed service from the build guide) ---------- */
+async function aiGen(){
+  const st=document.getElementById('aiState'); st.textContent='thinking…';
+  try{
+    const r=await fetch(document.getElementById('aiEndpoint').value,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:document.getElementById('aiPrompt').value})});
+    const d=await r.json();
+    if(d.error){ st.textContent='error: '+d.error; return; }
+    document.getElementById('aiScript').textContent=d.duckyscript||'(no script)';
+    document.getElementById('aiDetect').innerHTML=
+      `<p><b>${d.summary||''}</b></p>`+
+      `<p class="tag">${d.attack?.tactic||''} · ${d.attack?.technique||''}</p>`+
+      `<p style="margin:8px 0 4px">Telemetry: ${(d.telemetry||[]).join(', ')}</p>`+
+      `<pre>${(d.hunt||'').replace(/</g,'&lt;')}</pre>`+
+      `<p class="hint">${d.lab_notes||''}</p>`;
+    st.textContent='done';
+  }catch(e){ st.textContent='local AI unreachable — start the Flask/Ollama service (see build guide) + enable CORS'; }
+}
+function aiToEditor(){
+  const s=document.getElementById('aiScript').textContent;
+  if(s&&s!=='—'){ document.getElementById('script').value=s; tab('scripts',document.querySelector('nav button')); }
+}
+
+/* boot */
+simulate();
+</script>
+</body>
+</html>

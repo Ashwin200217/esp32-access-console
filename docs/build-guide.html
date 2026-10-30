@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Guide — ESP32-S3 Close-Access Device + Local AI Payload Assistant</title>
+<style>
+  :root{
+    --ink:#0d1117;          /* deep terminal ink */
+    --panel:#141b24;
+    --panel-2:#1b232e;
+    --line:#26313d;
+    --text:#c9d4de;
+    --muted:#7d8b99;
+    --signal:#ffb020;       /* amber signal accent */
+    --wire:#4ec9c9;         /* cyan — wiring / links */
+    --blue:#5aa9ff;         /* detection / blue-team */
+    --danger:#ff5f56;
+    --ok:#3fb950;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono','Cascadia Code',Menlo,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--ink);color:var(--text);
+    font-family:var(--sans);line-height:1.6;font-size:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:940px;margin:0 auto;padding:0 22px 120px}
+  header.masthead{
+    border-bottom:1px solid var(--line);padding:54px 0 30px;margin-bottom:12px;
+    background:
+      radial-gradient(120% 80% at 100% 0%, rgba(255,176,32,.06), transparent 60%);
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--signal);margin:0 0 14px;
+  }
+  h1{
+    font-family:var(--mono);font-weight:600;font-size:clamp(26px,4.4vw,40px);
+    line-height:1.12;margin:0 0 16px;letter-spacing:-.01em;color:#eef4f9;
+  }
+  h1 .dim{color:var(--muted)}
+  .lede{color:var(--muted);max-width:70ch;font-size:16.5px;margin:0}
+  .meta-row{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;font-family:var(--mono);font-size:12px;
+  }
+  .chip{
+    border:1px solid var(--line);background:var(--panel);border-radius:4px;
+    padding:6px 11px;color:var(--muted);
+  }
+  .chip b{color:var(--text);font-weight:600}
+
+  h2{
+    font-family:var(--mono);font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--signal);margin:60px 0 4px;display:flex;align-items:baseline;gap:12px;
+  }
+  h2 .n{color:var(--muted);font-size:12px}
+  h2 + .sub{color:#eef4f9;font-family:var(--sans);font-size:23px;font-weight:600;margin:0 0 22px;letter-spacing:-.01em}
+  h3{font-size:18px;margin:32px 0 8px;color:#eef4f9;font-weight:600}
+  p{margin:0 0 15px}
+  a{color:var(--wire);text-decoration:none;border-bottom:1px solid rgba(78,201,201,.3)}
+  a:hover{border-bottom-color:var(--wire)}
+  strong{color:#eef4f9}
+  ul,ol{margin:0 0 16px;padding-left:22px}
+  li{margin:6px 0}
+  hr{border:0;border-top:1px solid var(--line);margin:0}
+
+  /* callouts */
+  .note{
+    border:1px solid var(--line);border-left:3px solid var(--signal);
+    background:var(--panel);border-radius:6px;padding:16px 18px;margin:20px 0;font-size:15px;
+  }
+  .note.blue{border-left-color:var(--blue)}
+  .note.danger{border-left-color:var(--danger)}
+  .note .tag{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--signal);display:block;margin-bottom:7px;
+  }
+  .note.blue .tag{color:var(--blue)}
+  .note.danger .tag{color:var(--danger)}
+
+  /* tables */
+  .tbl{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+  .tbl th,.tbl td{border:1px solid var(--line);padding:10px 13px;text-align:left;vertical-align:top}
+  .tbl th{background:var(--panel-2);font-family:var(--mono);font-size:12px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--muted);font-weight:600}
+  .tbl td b{color:#eef4f9}
+  .tbl tr:nth-child(even) td{background:rgba(255,255,255,.012)}
+  .cost{font-family:var(--mono);color:var(--signal);white-space:nowrap}
+
+  /* code */
+  pre{
+    background:#0a0e13;border:1px solid var(--line);border-radius:8px;
+    padding:16px 18px;overflow-x:auto;margin:16px 0;font-size:13.5px;line-height:1.65;
+  }
+  code{font-family:var(--mono)}
+  p code,li code,td code{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 6px;font-size:13px;color:var(--wire);
+  }
+  pre code{background:none;border:0;padding:0;color:#c9d4de}
+  .c-com{color:#5c6b7a}     /* comment */
+  .c-key{color:var(--signal)}
+  .c-str{color:#8ddb8d}
+  .c-fn{color:var(--wire)}
+  .c-var{color:var(--blue)}
+  .filelabel{
+    font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;
+    text-transform:uppercase;margin:22px 0 -6px;display:flex;align-items:center;gap:8px;
+  }
+  .filelabel::before{content:"›";color:var(--signal)}
+
+  /* step list */
+  .steps{counter-reset:step;list-style:none;padding:0;margin:18px 0}
+  .steps > li{
+    position:relative;padding:0 0 22px 46px;margin:0;
+    border-left:1px solid var(--line);
+  }
+  .steps > li:last-child{border-left-color:transparent}
+  .steps > li::before{
+    counter-increment:step;content:counter(step,decimal-leading-zero);
+    position:absolute;left:-14px;top:-2px;width:27px;height:27px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--signal);color:var(--signal);
+    font-family:var(--mono);font-size:11px;display:flex;align-items:center;justify-content:center;
+  }
+  .steps > li h4{margin:0 0 5px;color:#eef4f9;font-size:16px}
+
+  .toc{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;
+    margin:26px 0 4px;
+  }
+  .toc a{
+    display:block;border:1px solid var(--line);background:var(--panel);border-radius:6px;
+    padding:12px 14px;font-family:var(--mono);font-size:13px;color:var(--text);border-bottom:1px solid var(--line);
+  }
+  .toc a:hover{border-color:var(--signal);color:#fff}
+  .toc a span{color:var(--muted);font-size:11px;display:block;margin-top:3px;letter-spacing:.04em}
+
+  footer{margin-top:70px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;font-family:var(--mono)}
+  .diagram{
+    font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:pre;
+    background:#0a0e13;border:1px solid var(--line);border-radius:8px;padding:18px;overflow-x:auto;margin:16px 0;line-height:1.5;
+  }
+  .diagram b{color:var(--wire);font-weight:400}
+  @media print{
+    body{background:#fff;color:#111}
+    .wrap{max-width:100%}
+    pre,.diagram{background:#f5f5f5;color:#111;border-color:#ccc}
+    a{color:#0645ad}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Close-Access Lab Build · v1.0</p>
+  <h1>DIY ESP32-S3 Injection Platform <span class="dim">+</span><br>a better, local AI payload assistant</h1>
+  <p class="lede">GhostChip is a <b>LilyGo T-Dongle S3</b> running the open-source <b>USB Army Knife</b> firmware, wrapped in a vendor UI and a cloud (Groq) AI script generator. This guide rebuilds the hardware in the UK for less, flashes the same firmware, and replaces the cloud AI with a <b>local, detection-annotated</b> assistant that fits a SOC / detection-engineering workflow far better than a black-box payload generator.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Target cost:</b> ~£14–22</span>
+    <span class="chip"><b>Board:</b> LilyGo T-Dongle S3</span>
+    <span class="chip"><b>Firmware:</b> USBArmyKnife</span>
+    <span class="chip"><b>AI:</b> Ollama · local · offline</span>
+    <span class="chip"><b>Skill floor:</b> intermediate</span>
+  </div>
+</header>
+
+<div class="note danger">
+  <span class="tag">Authorized use only</span>
+  This is a HID keystroke-injection device — MITRE ATT&CK <b>T1200 (Hardware Additions)</b> / <b>T1091</b>. Building and owning it is legal in the UK; <em>using</em> it against any system you don't own or have explicit written authorization to test is an offence under the <b>Computer Misuse Act 1990</b>. Everything below assumes an isolated home lab and payloads scoped to generating your own telemetry.
+</div>
+
+<div class="toc">
+  <a href="#bom">01 · Bill of Materials<span>parts + UK links</span></a>
+  <a href="#hardware">02 · The Hardware<span>why this board</span></a>
+  <a href="#flash">03 · Flash the Firmware<span>web + PlatformIO</span></a>
+  <a href="#ai">04 · The Better AI<span>local, annotated</span></a>
+  <a href="#code">05 · Build the Assistant<span>full source</span></a>
+  <a href="#detect">06 · Close the Loop<span>detection engineering</span></a>
+</div>
+
+<!-- 01 -->
+<h2 id="bom"><span class="n">01</span> Bill of Materials</h2>
+<p class="sub">What you actually need to buy</p>
+
+<p>The only non-negotiable part is the board. The "virtual TF card" that ships in the USB-A connector <b>has no storage</b> — you must supply a real microSD, or the firmware's filesystem features won't work (this is the same gotcha GhostChip flags in its own listing).</p>
+
+<table class="tbl">
+  <thead><tr><th>Part</th><th>Spec / why</th><th>UK source</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>LilyGo T-Dongle S3</b></td>
+      <td>ESP32-S3, USB-A male form factor, 0.96" ST7735 LCD, APA102 RGB LED, hardware button, covert microSD slot inside the connector, 16MB flash. Native USB — required for HID.</td>
+      <td><a href="https://www.amazon.co.uk/LILYGO-T-Dongle-S3-ESP32-S3-Development-Display/dp/B0BK9162QY">Amazon UK</a> · <a href="https://lilygo.cc/products/t-dongle-s3">LilyGo official</a></td>
+      <td class="cost">£11–16</td>
+    </tr>
+    <tr>
+      <td><b>microSD card</b></td>
+      <td>8–32GB, any reputable brand. 32GB reported as best-compatibility by builders. Stores payloads, loot, logs.</td>
+      <td>Any retailer / already own one</td>
+      <td class="cost">£3–5</td>
+    </tr>
+    <tr>
+      <td>USB-C data cable</td>
+      <td>For first flash only (the side port). Must be a <em>data</em> cable, not charge-only.</td>
+      <td>Already own one</td>
+      <td class="cost">£0</td>
+    </tr>
+    <tr>
+      <td><i>Optional:</i> heat-shrink / 3D case</td>
+      <td>Cosmetic. LilyGo sells a plastic shell; STLs float around Thingiverse.</td>
+      <td>—</td>
+      <td class="cost">£0–4</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Sourcing note</span>
+  Prices swing on Amazon UK depending on seller and import. If you're not in a hurry, LilyGo's own store / AliExpress official store is usually a couple of pounds cheaper but with 1–2 week shipping. Avoid the ultra-cheap "USB Dongle Udisk for P4" ESP32-S2 clones unless you specifically want a screenless minimal build — they can't run the web UI and some ship with a CH343P chip and no reset button, which complicates flashing.
+</div>
+
+<!-- 02 -->
+<h2 id="hardware"><span class="n">02</span> The Hardware</h2>
+<p class="sub">Why this exact board, and what's inside</p>
+
+<p>The whole trick of a BadUSB device is that the microcontroller enumerates to the host as a <b>USB HID keyboard</b> and types faster than any human. The ESP32-S3 has a <b>native USB-OTG peripheral</b> (unlike the classic ESP32, which only has a UART bridge), so it can present itself as a real keyboard — that's the hard requirement. The T-Dongle S3 additionally gives you Wi-Fi/BLE (for remote control and recon), a screen (decoy messages), an RGB LED, and a button to trigger scripts on-device.</p>
+
+<div class="diagram">   <b>LilyGo T-Dongle S3 — logical layout</b>
+
+   ┌──────────────────────────────────────────────┐
+   │  USB-A male plug  ──►  host enumerates as HID │
+   │        │                                      │
+   │   [microSD slot hidden inside the connector]  │
+   │        │                                      │
+   │   ESP32-S3 (Xtensa LX7 dual-core @240MHz)     │
+   │     ├── native USB  → keyboard / mass-storage │
+   │     ├── Wi-Fi 2.4G + BLE 5  → C2 / recon      │
+   │     ├── ST7735 LCD  → decoy / status          │
+   │     ├── APA102 RGB  → status LED              │
+   │     └── button      → on-device script run    │
+   │                                               │
+   │   USB-C (side)  →  flashing + serial only     │
+   └──────────────────────────────────────────────┘</div>
+
+<p>Functionally identical to GhostChip. The difference between the £14 you spend here and the ₹2,499 GhostChip charges is the software layer and packaging — which is exactly the part we're going to do better.</p>
+
+<!-- 03 -->
+<h2 id="flash"><span class="n">03</span> Flash the Firmware</h2>
+<p class="sub">USB Army Knife — the same engine GhostChip runs</p>
+
+<p>USB Army Knife (<a href="https://github.com/i-am-shodan/USBArmyKnife">i-am-shodan/USBArmyKnife</a>) is the mature, actively-maintained firmware. It gives you DuckyScript execution, a web control UI over Wi-Fi, ESP32 Marauder integration for wireless recon, USB-NIC / PCAP tricks, and on-device script selection. Two ways to flash — pick one.</p>
+
+<h3>Path A — Web flasher (fastest, zero toolchain)</h3>
+<ol class="steps">
+  <li>
+    <h4>Insert a real microSD, then connect the USB-C side port</h4>
+    Use Chrome or Edge (Web Serial API required). Firefox won't work for the web flasher.
+  </li>
+  <li>
+    <h4>Enter bootloader mode</h4>
+    Remove the dongle. <b>Hold the hardware button</b>, insert the device, wait ~1s, release. A new COM/serial port appears.
+  </li>
+  <li>
+    <h4>Open the official web installer and select your board</h4>
+    Follow the <a href="https://github.com/i-am-shodan/USBArmyKnife/wiki/Installation">Installation wiki</a>. Choose the <code>LILYGO-T-Dongle-S3</code> target, connect the serial port when prompted, and flash.
+  </li>
+  <li>
+    <h4>First boot</h4>
+    The device brings up a Wi-Fi AP (SSID/PSK shown on screen or in the docs). Join it, browse to the gateway IP, and you're in the control UI.
+  </li>
+</ol>
+
+<h3>Path B — PlatformIO / VS Code (full control, lets you customize)</h3>
+<p>Use this path if you want to modify the firmware, change the AP credentials, or bake in your own defaults. This is also what you'll want once you're wiring in the AI assistant workflow.</p>
+
+<div class="filelabel">terminal</div>
+<pre><code><span class="c-com"># Prereqs: git, VS Code + PlatformIO extension, USB-C data cable</span>
+git clone https://github.com/i-am-shodan/USBArmyKnife.git
+<span class="c-fn">cd</span> USBArmyKnife
+
+<span class="c-com"># Pull the ESP32 Marauder submodule — skip this and the build fails</span>
+git submodule update --init
+
+<span class="c-com"># Open in VS Code, let PlatformIO index, then in the PIO menu:</span>
+<span class="c-com">#   expand  LILYGO-T-Dongle-S3  →  Upload</span>
+<span class="c-com"># If your board has NO SD card, also run: Platform → Upload Filesystem Image</span>
+code .</code></pre>
+
+<div class="note">
+  <span class="tag">Flashing quirk</span>
+  On the ESP32-S3, the bootloader first enumerates as a USB-serial device. If the upload can't find the port, redo the hold-button-then-insert dance — timing matters. Once USB Army Knife is running normally, the device switches roles to HID, so it will no longer show as a serial port until you re-enter bootloader mode.
+</div>
+
+<!-- 04 -->
+<h2 id="ai"><span class="n">04</span> The Better AI</h2>
+<p class="sub">Where GhostChip is weak, and how we beat it</p>
+
+<p>GhostChip's headline feature is "describe your payload in English, Llama 3.3 70B writes the DuckyScript." It works, but for anyone doing real security work it has three architectural weaknesses:</p>
+
+<table class="tbl">
+  <thead><tr><th>GhostChip's AI</th><th>The problem</th><th>Our approach</th></tr></thead>
+  <tbody>
+    <tr><td>Cloud inference via Groq API</td><td>Dead without internet + a valid API key. Useless in an air-gapped lab. Your prompts leave your network.</td><td><b>Local model via Ollama.</b> Runs offline, no key, nothing leaves the host.</td></tr>
+    <tr><td>Generates a raw payload, nothing else</td><td>Black box. Gives you an attack script with zero context on what it <em>does</em> to a defended host.</td><td><b>Detection-annotated output.</b> Every script ships with its ATT&CK mapping, the telemetry it generates, and a starter hunting query.</td></tr>
+    <tr><td>No scoping</td><td>Optimized purely for offense — nothing tying it to authorized, lab-bounded work.</td><td><b>Lab-scoped system prompt</b> + a benign, telemetry-focused preset library out of the box.</td></tr>
+  </tbody>
+</table>
+
+<div class="note blue">
+  <span class="tag">The actual value-add</span>
+  For a SOC analyst / detection engineer the interesting artifact isn't the payload — it's <b>the pair</b>: an offensive action <em>and</em> the defensive signal it produces. That pairing is exactly what a purple-team pipeline (and your IntelliSOC work) needs, and it's what turns a toy into a lab instrument. We build the assistant so that generating a script <em>always</em> generates its detection story alongside it.
+</div>
+
+<p><b>Architecture.</b> A tiny local web app: a Python/Flask backend that talks to Ollama on <code>localhost</code>, a single-page front-end for prompting and editing, and a structured system prompt that forces the model to return DuckyScript <em>plus</em> a detection block as JSON. No cloud, no keys.</p>
+
+<div class="diagram">  browser UI  ──HTTP──►  Flask backend  ──HTTP──►  Ollama (localhost:11434)
+      ▲                       │                        local llama3.1 / qwen2.5
+      │                       │
+      └────── DuckyScript + ATT&CK + telemetry + hunt query (JSON) ──────┘
+
+  everything runs on your machine · nothing leaves the host</div>
+
+<!-- 05 -->
+<h2 id="code"><span class="n">05</span> Build the Assistant</h2>
+<p class="sub">Full working source — offline, annotated</p>
+
+<h3>Step 1 — Install the local model runtime</h3>
+<div class="filelabel">terminal</div>
+<pre><code><span class="c-com"># Install Ollama (macOS/Linux/WSL). Windows: use the installer at ollama.com</span>
+curl -fsSL https://ollama.com/install.sh | sh
+
+<span class="c-com"># Pull a capable, small-enough local model. qwen2.5-coder is strong at scripting;</span>
+<span class="c-com"># llama3.1:8b is a solid general fallback. Bigger = better if you have the VRAM.</span>
+ollama pull qwen2.5-coder:7b
+
+<span class="c-com"># Backend deps</span>
+pip install flask requests</code></pre>
+
+<h3>Step 2 — The backend</h3>
+<p>The system prompt is the heart of it. It pins the model to authorized lab use, forces structured output, and — critically — makes the detection annotation mandatory rather than optional.</p>
+
+<div class="filelabel">app.py</div>
+<pre><code><span class="c-key">import</span> json, requests
+<span class="c-key">from</span> flask <span class="c-key">import</span> Flask, request, jsonify, Response
+
+app = Flask(__name__)
+OLLAMA = <span class="c-str">"http://localhost:11434/api/chat"</span>
+MODEL  = <span class="c-str">"qwen2.5-coder:7b"</span>
+
+<span class="c-com"># --- The system prompt does the heavy lifting -------------------------------</span>
+<span class="c-com"># It scopes the tool to authorized lab work and makes the blue-team</span>
+<span class="c-com"># annotation non-optional, which is the whole point of the improvement.</span>
+SYSTEM = <span class="c-str">"""You are a DuckyScript assistant for an isolated, authorized
+security lab used for detection-engineering. The operator tests only systems
+they own. Your job is NOT just to write a payload — it is to produce a payload
+AND the defensive telemetry it generates, as a single teaching artifact.
+
+For every request, return ONLY valid JSON with this exact shape:
+{
+  "duckyscript": "<the script, real DuckyScript syntax>",
+  "summary": "<one line: what the keystrokes do>",
+  "attack": { "tactic": "<ATT&CK tactic>", "technique": "<Txxxx name>" },
+  "telemetry": ["<host/EDR event this should produce>", ...],
+  "hunt": "<a starter KQL or Splunk query to detect it>",
+  "lab_notes": "<what to watch for on the monitored host>"
+}
+
+Prefer payloads that generate clean, observable telemetry over payloads that
+try to be stealthy. Do not include credential theft, data exfiltration,
+C2/reverse-shell stagers, or defense-tampering. If a request asks for those,
+return a benign telemetry-equivalent instead and say so in lab_notes.
+No prose outside the JSON."""</span>
+
+<span class="c-key">def</span> <span class="c-fn">ask_model</span>(user_prompt):
+    payload = {
+        <span class="c-str">"model"</span>: MODEL,
+        <span class="c-str">"stream"</span>: <span class="c-key">False</span>,
+        <span class="c-str">"format"</span>: <span class="c-str">"json"</span>,          <span class="c-com"># Ollama enforces JSON output</span>
+        <span class="c-str">"messages"</span>: [
+            {<span class="c-str">"role"</span>: <span class="c-str">"system"</span>, <span class="c-str">"content"</span>: SYSTEM},
+            {<span class="c-str">"role"</span>: <span class="c-str">"user"</span>,   <span class="c-str">"content"</span>: user_prompt},
+        ],
+    }
+    r = requests.post(OLLAMA, json=payload, timeout=<span class="c-var">120</span>)
+    r.raise_for_status()
+    <span class="c-key">return</span> json.loads(r.json()[<span class="c-str">"message"</span>][<span class="c-str">"content"</span>])
+
+<span class="c-key">@app.route</span>(<span class="c-str">"/api/generate"</span>, methods=[<span class="c-str">"POST"</span>])
+<span class="c-key">def</span> <span class="c-fn">generate</span>():
+    prompt = request.json.get(<span class="c-str">"prompt"</span>, <span class="c-str">""</span>).strip()
+    <span class="c-key">if</span> <span class="c-key">not</span> prompt:
+        <span class="c-key">return</span> jsonify(error=<span class="c-str">"empty prompt"</span>), <span class="c-var">400</span>
+    <span class="c-key">try</span>:
+        <span class="c-key">return</span> jsonify(ask_model(prompt))
+    <span class="c-key">except</span> Exception <span class="c-key">as</span> e:
+        <span class="c-key">return</span> jsonify(error=str(e)), <span class="c-var">500</span>
+
+<span class="c-key">@app.route</span>(<span class="c-str">"/"</span>)
+<span class="c-key">def</span> <span class="c-fn">index</span>():
+    <span class="c-key">return</span> Response(INDEX_HTML, mimetype=<span class="c-str">"text/html"</span>)
+
+<span class="c-key">if</span> __name__ == <span class="c-str">"__main__"</span>:
+    <span class="c-com"># bind to localhost only — this tool never needs to be network-exposed</span>
+    app.run(host=<span class="c-str">"127.0.0.1"</span>, port=<span class="c-var">5001</span>)</code></pre>
+
+<h3>Step 3 — The front-end</h3>
+<p>Single embedded page: a prompt box, the generated DuckyScript in an editable panel, and — the part GhostChip doesn't have — a detection panel rendered from the same response. Drop this in the same file as <code>INDEX_HTML</code>.</p>
+
+<div class="filelabel">app.py — INDEX_HTML string</div>
+<pre><code>INDEX_HTML = <span class="c-str">r"""&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Local DuckyScript Assistant&lt;/title&gt;&lt;style&gt;
+ body{background:#0d1117;color:#c9d4de;font:15px system-ui;margin:0;padding:28px;max-width:820px;margin:auto}
+ h1{font-size:18px;color:#ffb020;font-family:monospace}
+ textarea,pre{width:100%;background:#0a0e13;color:#c9d4de;border:1px solid #26313d;
+   border-radius:8px;padding:12px;font-family:monospace;font-size:13px;box-sizing:border-box}
+ button{background:#ffb020;color:#0d1117;border:0;border-radius:6px;padding:10px 18px;
+   font-weight:600;cursor:pointer;margin-top:8px}
+ .panel{border:1px solid #26313d;border-radius:8px;padding:14px;margin-top:14px;background:#141b24}
+ .panel h3{margin:0 0 8px;font-size:13px;letter-spacing:.1em;text-transform:uppercase}
+ .det h3{color:#5aa9ff} .tag{color:#7d8b99;font-family:monospace;font-size:12px}
+&lt;/style&gt;&lt;/head&gt;&lt;body&gt;
+ &lt;h1&gt;// local ducky assistant &lt;span class="tag"&gt;offline · annotated&lt;/span&gt;&lt;/h1&gt;
+ &lt;textarea id="p" rows="3" placeholder="e.g. open notepad and type a lab marker string"&gt;&lt;/textarea&gt;
+ &lt;button onclick="go()"&gt;Generate&lt;/button&gt;
+ &lt;div class="panel"&gt;&lt;h3&gt;DuckyScript&lt;/h3&gt;&lt;pre id="ds" contenteditable="true"&gt;—&lt;/pre&gt;&lt;/div&gt;
+ &lt;div class="panel det"&gt;&lt;h3&gt;Detection story&lt;/h3&gt;&lt;div id="det"&gt;—&lt;/div&gt;&lt;/div&gt;
+&lt;script&gt;
+async function go(){
+  const prompt=document.getElementById('p').value;
+  document.getElementById('ds').textContent='generating…';
+  const r=await fetch('/api/generate',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+  const d=await r.json();
+  if(d.error){document.getElementById('ds').textContent='error: '+d.error;return;}
+  document.getElementById('ds').textContent=d.duckyscript||'';
+  document.getElementById('det').innerHTML=
+    '&lt;p&gt;&lt;b&gt;'+(d.summary||'')+'&lt;/b&gt;&lt;/p&gt;'+
+    '&lt;p class=tag&gt;'+(d.attack?.tactic||'')+' · '+(d.attack?.technique||'')+'&lt;/p&gt;'+
+    '&lt;p&gt;Telemetry: '+((d.telemetry||[]).join(', '))+'&lt;/p&gt;'+
+    '&lt;pre&gt;'+(d.hunt||'')+'&lt;/pre&gt;'+
+    '&lt;p class=tag&gt;'+(d.lab_notes||'')+'&lt;/p&gt;';
+}
+&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;"""</span></code></pre>
+
+<div class="filelabel">terminal</div>
+<pre><code>python app.py
+<span class="c-com"># open http://127.0.0.1:5001 — prompt, generate, edit, then save the</span>
+<span class="c-com"># DuckyScript to the dongle's microSD (or paste into the USB Army Knife web UI)</span></code></pre>
+
+<div class="note">
+  <span class="tag">Why the presets stay benign</span>
+  The shipped scope is deliberately telemetry-first — launch-a-process, type-a-marker, run <code>whoami</code>/<code>systeminfo</code> to a local file. Those give you clean, repeatable <b>process-creation and HID-insertion events</b> to build and tune detections against, which is the point of a home lab. It keeps the tool useful without turning it into an exfil kit, and it's a stronger story for a portfolio or dissertation than "I built a payload generator."
+</div>
+
+<!-- 06 -->
+<h2 id="detect"><span class="n">06</span> Close the Loop</h2>
+<p class="sub">The detection engineering the device is actually for</p>
+
+<p>The reason to build this rather than just read about BadUSB is that almost nobody has <b>generated real HID-injection telemetry</b> to validate their detections against. Plug the dongle into a monitored Windows VM (Sysmon + your Defender/Sentinel pipeline), fire a benign script, and hunt for the signature: a fresh USB HID device followed near-instantly by a shell process with non-human timing.</p>
+
+<div class="filelabel">Microsoft Sentinel / Defender XDR — KQL hunting query</div>
+<pre><code><span class="c-com">// Hunt: interactive shell spawned within seconds of process init,</span>
+<span class="c-com">// a classic HID-injection tell. Tune the window + parent list to your baseline.</span>
+DeviceProcessEvents
+| <span class="c-key">where</span> Timestamp > ago(1d)
+| <span class="c-key">where</span> FileName <span class="c-key">in~</span> (<span class="c-str">"powershell.exe"</span>, <span class="c-str">"cmd.exe"</span>, <span class="c-str">"wscript.exe"</span>, <span class="c-str">"mshta.exe"</span>)
+<span class="c-com">// spawned from the Run dialog / Explorer, as injected keystrokes do</span>
+| <span class="c-key">where</span> InitiatingProcessFileName <span class="c-key">in~</span> (<span class="c-str">"explorer.exe"</span>, <span class="c-str">"userinit.exe"</span>)
+| <span class="c-key">extend</span> secs_since_boot = datetime_diff(<span class="c-str">'second'</span>, Timestamp, InitiatingProcessCreationTime)
+| <span class="c-key">where</span> secs_since_boot < <span class="c-var">15</span>
+| <span class="c-key">project</span> Timestamp, DeviceName, AccountName, FileName,
+            ProcessCommandLine, InitiatingProcessFileName
+| <span class="c-key">order by</span> Timestamp <span class="c-key">desc</span></code></pre>
+
+<p>Pair that with USB device-insertion events (<code>DeviceEvents</code> / <code>PnPDeviceConnected</code>, or Sysmon <b>Event ID 20</b> for driver/PnP where available) to correlate "new HID keyboard" with "shell spawned." When your benign script trips the query, you've got a validated detection — and the exact artifact your assistant already annotated when it wrote the payload.</p>
+
+<div class="note blue">
+  <span class="tag">Purple-team framing</span>
+  Offense generates the event, defense catches it, and the AI assistant hands you both halves in one shot. That closed loop — script + telemetry + hunt query, all produced locally — is the thing GhostChip's cloud generator can't give you, and it's the version of this project worth putting your name on.
+</div>
+
+<footer>
+  Build guide · ESP32-S3 close-access platform + local AI assistant · for authorized lab use only<br>
+  Firmware: i-am-shodan/USBArmyKnife · Board: LilyGo T-Dongle S3 · Model runtime: Ollama
+</footer>
+
+</div>
+</body>
+</html>
